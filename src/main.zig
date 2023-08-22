@@ -1,33 +1,22 @@
 const std = @import("std");
-const fs = std.fs;
-const heap = std.heap;
-const io = std.io;
-const mem = std.mem;
 const args = @import("args.zig");
 const Board = @import("Board.zig");
 const term = @import("term.zig");
 
-pub var buf_writer = io.bufferedWriter(io.getStdOut().writer());
+pub var buf_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
 pub const writer = buf_writer.writer();
-var buffer: [mem.page_size]u8 = undefined;
-var fba = heap.FixedBufferAllocator.init(&buffer);
+var buffer: [std.mem.page_size]u8 = undefined;
+var fba = std.heap.FixedBufferAllocator.init(&buffer);
 pub const allocator = fba.allocator();
 
 pub fn main() !void {
-    const tty = try fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
-    defer tty.close();
-    // const reader = io.getStdIn().reader();
-    const reader = tty.reader();
+    const reader = std.io.getStdIn().reader();
 
     var board = try Board.init(try args.parse());
     defer board.deinit();
 
-    try term.init(tty.handle);
-    try buf_writer.flush();
-    defer {
-        term.deinit(tty.handle) catch {};
-        buf_writer.flush() catch {};
-    }
+    try term.init();
+    defer term.deinit() catch {};
 
     try board.draw();
     while (true) {

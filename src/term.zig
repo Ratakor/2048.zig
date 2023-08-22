@@ -1,5 +1,6 @@
 const os = @import("std").os;
-const writer = @import("main.zig").writer;
+const main = @import("main.zig");
+const writer = main.writer;
 const csi = "\x1b[";
 var orig: os.termios = undefined;
 
@@ -35,9 +36,10 @@ fn leaveAlt() !void {
     try writer.writeAll(csi ++ "u"); // Restore cursor position.
 }
 
-pub fn init(handle: os.system.fd_t) !void {
+pub fn init() !void {
+    const handle = os.STDIN_FILENO;
     orig = try os.tcgetattr(handle);
-    errdefer deinit(handle) catch {};
+    errdefer deinit() catch {};
 
     var raw = orig;
     raw.lflag &= ~@as(
@@ -50,14 +52,17 @@ pub fn init(handle: os.system.fd_t) !void {
     try enterAlt();
     try clear();
     try reset();
+    try main.buf_writer.flush();
 }
 
-pub fn deinit(handle: os.system.fd_t) !void {
+pub fn deinit() !void {
+    const handle = os.STDIN_FILENO;
     try os.tcsetattr(handle, .FLUSH, orig); // .NOW
     try clear();
     try leaveAlt();
     try showCursor();
     try reset();
+    try main.buf_writer.flush();
 }
 
 pub inline fn clear() !void {

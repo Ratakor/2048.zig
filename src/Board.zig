@@ -5,12 +5,12 @@ const io = std.io;
 const os = std.os;
 const rand = std.rand;
 const time = std.time;
-const term = @import("term.zig");
 const main = @import("main.zig");
+const term = @import("term.zig");
 
-const cell_size = 7; // DO NOT CHANGE
 const allocator = main.allocator;
 const writer = main.writer;
+const CELL_SIZE = 7; // DO NOT CHANGE
 var rnd: rand.DefaultPrng = undefined;
 
 pub const Board = @This();
@@ -18,6 +18,7 @@ pub const Board = @This();
 cells: [][]u8,
 size: usize,
 score: u32,
+win: bool,
 prev: *Board,
 tmp: *Board,
 
@@ -63,6 +64,7 @@ pub fn init(size: usize) !Board {
         .cells = try createBoard(size),
         .size = size,
         .score = 0,
+        .win = false,
         .prev = try allocator.create(Board),
         .tmp = try allocator.create(Board),
     };
@@ -102,49 +104,49 @@ fn getSavePath(buf: []u8) !usize {
 }
 
 pub fn load(self: *Board) !bool {
-    var buf: [4096]u8 = undefined;
-    var len = try getSavePath(buf[0..]);
-    len += (try fmt.bufPrint(buf[len..], "{d}", .{self.size})).len;
-    const f = fs.openFileAbsolute(buf[0..len], .{ .mode = .read_only }) catch return false;
+    var path: [4096]u8 = undefined;
+    var len = try getSavePath(path[0..]);
+    len += (try fmt.bufPrint(path[len..], "{d}", .{self.size})).len;
+    const cwd = fs.cwd();
+    const f = cwd.openFile(path[0..len], .{.mode = .read_only}) catch |err| switch (err) {
+        error.FileNotFound => return false,
+        else => |e| return e,
+    };
     defer f.close();
+    errdefer cwd.deleteFile(path[0..len]) catch {};
 
     var buf_reader = io.bufferedReader(f.reader());
     const reader = buf_reader.reader();
-    self.score = try fmt.parseInt(
-        u32,
-        try reader.readUntilDelimiterOrEof(buf[0..], '\n') orelse return false,
-        10
-    );
+    var buf: [32]u8 = undefined;
+    const score = try reader.readUntilDelimiter(buf[0..], '\n');
+    self.score = try fmt.parseInt(u32, score, 10);
     var i: usize = 0;
-    while (try reader.readUntilDelimiterOrEof(buf[0..], '\n')) |line| {
+    while (i < self.size) : (i += 1) {
         var j: usize = 0;
-        for (line) |byte| {
-            self.cells[i][j] = byte;
-            j += 1;
+        while (j < self.size) : (j += 1) {
+            self.cells[i][j] = try reader.readByte();
         }
-        i += 1;
     }
     return true;
 }
 
 pub fn save(self: *Board) !void {
-    var buf: [4096]u8 = undefined;
-    var len = try getSavePath(buf[0..]);
+    var path: [4096]u8 = undefined;
+    var len = try getSavePath(path[0..]);
     const cwd = fs.cwd();
-    try cwd.makePath(buf[0..len]);
-    len += (try fmt.bufPrint(buf[len..], "{d}", .{self.size})).len;
-    const f = try cwd.createFile(buf[0..len], .{});
+    try cwd.makePath(path[0..len]);
+    len += (try fmt.bufPrint(path[len..], "{d}", .{self.size})).len;
+    const f = try cwd.createFile(path[0..len], .{});
     defer f.close();
+    errdefer cwd.deleteFile(path[0..len]) catch {};
 
     var buf_writer = io.bufferedWriter(f.writer());
     const fwriter = buf_writer.writer();
-
     try fwriter.print("{d}\n", .{self.score});
     for (self.cells) |row| {
         for (row) |cell| {
             try fwriter.writeByte(cell);
         }
-        try fwriter.writeByte('\n');
     }
     try buf_writer.flush();
 }
@@ -206,6 +208,7 @@ fn slide(self: *Board) bool {
         while (x < row.len) : (x += 1) {
             if (row[x] != 0) {
                 const t = findTarget(row, x, stop);
+
                 if (t != x) {
                     if (row[t] == 0) {
                         row[t] = row[x];
@@ -279,10 +282,10 @@ pub fn undo(self: *Board) void {
     boardCopy(self, self.prev);
 }
 
-fn hasEmptyCell(board: [][]u8) bool {
+fn hasValue(board: [][]u8, comptime val: u8) bool {
     for (board) |row| {
         for (row) |cell| {
-            if (cell == 0)
+            if (cell == val)
                 return true;
         }
     }
@@ -305,11 +308,14 @@ fn deleteSave(size: usize) !void {
     var path: [4096]u8 = undefined;
     var len = try getSavePath(path[0..]);
     len += (try fmt.bufPrint(path[len..], "{d}", .{size})).len;
-    try fs.deleteFileAbsolute(path[0..len]);
+    fs.deleteFileAbsolute(path[0..len]) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => |e| return e,
+    };
 }
 
-pub fn gameOver(self: *Board) bool {
-    if (hasEmptyCell(self.cells))
+pub fn gameOver(self: *Board) !bool {
+    if (hasValue(self.cells, 0))
         return false;
     if (findPairOneWay(self.cells))
         return false;
@@ -317,7 +323,7 @@ pub fn gameOver(self: *Board) bool {
     defer rotateLeft(self.cells);
     if (findPairOneWay(self.cells))
         return false;
-    deleteSave(self.size) catch {};
+    try deleteSave(self.size);
     return true;
 }
 
@@ -359,7 +365,7 @@ fn countDigits(number: u32) u8 {
 }
 
 fn printHeader(self: *Board) !void {
-    const board_size = cell_size * self.size;
+    const board_size = CELL_SIZE * self.size;
     const n = board_size -| ("2048.zig".len + countDigits(self.score) + " pts".len);
     try writer.writeAll("2048.zig");
     try writer.writeByteNTimes(' ', n);
@@ -367,11 +373,10 @@ fn printHeader(self: *Board) !void {
 }
 
 pub fn print(self: *Board, str: []const u8) !void {
-    const board_size = cell_size * self.size;
+    const board_size = CELL_SIZE * self.size;
     const n = (board_size - str.len) / 2;
     try writer.writeByteNTimes(' ', n);
-    try writer.writeAll(str);
-    try writer.writeByte('\n');
+    try writer.print("{s}\n", .{str});
 }
 
 pub fn draw(self: *Board) !void {
@@ -381,9 +386,9 @@ pub fn draw(self: *Board) !void {
     for (self.cells) |row| {
         for (row) |cell| {
             try setColors(cell);
-            try writer.writeByteNTimes(' ', cell_size);
+            try writer.writeByteNTimes(' ', CELL_SIZE);
         }
-        try writer.writeByte('\n');
+        try writer.writeAll("\n");
         for (row) |cell| {
             try setColors(cell);
             if (cell == 0) {
@@ -392,7 +397,7 @@ pub fn draw(self: *Board) !void {
                 const real = @as(u32, 1) << @intCast(cell);
                 const digits = countDigits(real);
                 // TODO kinda unsafe negative
-                const t = cell_size - digits;
+                const t = CELL_SIZE - digits;
                 if (digits % 2 == 0) {
                     try writer.writeByteNTimes(' ', t - t / 2 - 1);
                 } else {
@@ -402,17 +407,20 @@ pub fn draw(self: *Board) !void {
                 try writer.writeByteNTimes(' ', t - t / 2);
             }
         }
-        try writer.writeByte('\n');
+        try writer.writeAll("\n");
         for (row) |cell| {
             try setColors(cell);
-            try writer.writeByteNTimes(' ', cell_size);
+            try writer.writeByteNTimes(' ', CELL_SIZE);
         }
         try term.reset();
-        try writer.writeByte('\n');
-        if (gameOver(self)) {
+        try writer.writeAll("\n");
+        if (!self.win and hasValue(self.cells, 11)) {
+            self.win = true;
+            try print(self, "VICTORY!");
+        } else if (try gameOver(self)) {
             try print(self, "GAME OVER");
         } else {
-            try writer.writeByte('\n');
+            try writer.writeAll("\n");
         }
         try term.cursorUp();
     }

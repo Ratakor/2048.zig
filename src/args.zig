@@ -1,64 +1,55 @@
 const std = @import("std");
 const eql = std.mem.eql;
-const exit = std.os.exit;
 const allocator = @import("main.zig").allocator;
-const version = "0.1";
-var progname: [:0]const u8 = undefined;
 
-fn usage(writer: anytype) !void {
-    try writer.print(
-        \\Usage: {s} [options]
-        \\
-        \\Options:
-        \\-s|--size [n]    | Set the board size to n
-        \\-h|--help        │ Print this help message
-        \\-v|--version     | Print version information
-        \\
-        \\Commands:
-        \\  ↑    w    k    | Classic movements
-        \\ ←↓→  asd  hjl   |
-        \\ q               | Quit the game
-        \\ r               | Restart the game
-        \\ u               | Undo one action
-        \\
-    , .{progname});
+const version = "0.1";
+const usage =
+    \\Usage: {s} [options]
+    \\
+    \\Options:
+    \\-s|--size [n]    | Set the board size to n
+    \\-h|--help        │ Print this help message
+    \\-v|--version     | Print version information
+    \\
+    \\Commands:
+    \\  ↑    w    k    | Classic movements
+    \\ ←↓→  asd  hjl   |
+    \\ q               | Quit the game
+    \\ r               | Restart the game
+    \\ u               | Undo one action
+    \\
+;
+
+fn die(status: u8, comptime fmt: []const u8, args: anytype) noreturn {
+    const stderr = std.io.getStdErr().writer();
+    stderr.print(fmt, args) catch {};
+    std.os.exit(status);
 }
 
 pub fn parse() !usize {
     var size: usize = 4;
-    const stderr = std.io.getStdErr().writer();
     var args = try std.process.argsWithAllocator(allocator);
     defer args.deinit();
 
-    progname = args.next().?;
+    const progname = args.next().?;
     while (args.next()) |arg| {
         if (eql(u8, arg, "-h") or eql(u8, arg, "--help")) {
-            try usage(stderr);
-            exit(0);
+            die(0, usage, .{progname});
         } else if (eql(u8, arg, "-v") or eql(u8, arg, "--version")) {
-            try stderr.print("{s} {s}\n", .{progname, version});
-            exit(0);
+            die(0, "{s} {s}\n", .{progname, version});
         } else if (eql(u8, arg, "-s") or eql(u8, arg, "--size")) {
-            const val = args.next() orelse {
-                try stderr.writeAll("Error: no size\n");
-                exit(1);
-            };
+            const val = args.next() orelse die(1, "Error: no size provided\n", .{});
             size = std.fmt.parseUnsigned(usize, val, 10) catch |err| {
-                try stderr.print("Error: {}\n", .{err});
-                exit(1);
+                die(1, "Error: {}\n", .{err});
             };
             if (size <= 1) {
-                try stderr.writeAll("Error: size too small\n");
-                exit(1);
+                die(1, "Error: size is too small\n", .{});
             }
             if (size > 16) {
-                try stderr.writeAll("Error: size too big\n");
-                exit(1);
+                die(1, "Error: size is too big\n", .{});
             }
         } else {
-            try stderr.print("Error: unknown option {s}\n", .{arg});
-            try usage(stderr);
-            exit(1);
+            try die(1, "Error: unknown option {s}\n" ++ usage, .{arg, progname});
         }
     }
     return size;

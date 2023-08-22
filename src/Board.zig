@@ -360,7 +360,7 @@ fn countDigits(number: u32) u8 {
 
 fn printHeader(self: *Board) !void {
     const board_size = cell_size * self.size;
-    const n = board_size - ("2048.zig".len + countDigits(self.score) + " pts".len);
+    const n = board_size -| ("2048.zig".len + countDigits(self.score) + " pts".len);
     try writer.writeAll("2048.zig");
     try writer.writeByteNTimes(' ', n);
     try writer.print("{d} pts\n\n", .{self.score});

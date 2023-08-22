@@ -19,6 +19,7 @@ cells: [][]u8,
 size: usize,
 score: u32,
 prev: *Board,
+tmp: *Board,
 
 pub fn addRandom(self: *Board) !void {
     var len: usize = 0;
@@ -63,8 +64,10 @@ pub fn init(size: usize) !Board {
         .size = size,
         .score = 0,
         .prev = try allocator.create(Board),
+        .tmp = try allocator.create(Board),
     };
     board.prev.cells = try createBoard(size);
+    board.tmp.cells = try createBoard(size);
     if (!try board.load()) {
         try board.addRandom();
         try board.addRandom();
@@ -76,7 +79,9 @@ pub fn init(size: usize) !Board {
 pub fn deinit(self: *Board) void {
     destroyBoard(self.cells);
     destroyBoard(self.prev.cells);
+    destroyBoard(self.tmp.cells);
     allocator.destroy(self.prev);
+    allocator.destroy(self.tmp);
 }
 
 pub fn reset(self: *Board) void {
@@ -227,31 +232,47 @@ fn boardCopy(dst: *Board, src: *Board) void {
 }
 
 pub fn moveLeft(self: *Board) bool {
-    boardCopy(self.prev, self);
-    return slide(self);
+    boardCopy(self.tmp, self);
+    if (slide(self)) {
+        boardCopy(self.prev, self.tmp);
+        return true;
+    }
+    return false;
 }
 
 pub fn moveUp(self: *Board) bool {
-    boardCopy(self.prev, self);
+    boardCopy(self.tmp, self);
     rotateRight(self.cells);
     defer rotateLeft(self.cells);
-    return slide(self);
+    if (slide(self)) {
+        boardCopy(self.prev, self.tmp);
+        return true;
+    }
+    return false;
 }
 
 pub fn moveRight(self: *Board) bool {
-    boardCopy(self.prev, self);
+    boardCopy(self.tmp, self);
     rotateRight(self.cells);
     rotateRight(self.cells);
     defer rotateLeft(self.cells);
     defer rotateLeft(self.cells);
-    return slide(self);
+    if (slide(self)) {
+        boardCopy(self.prev, self.tmp);
+        return true;
+    }
+    return false;
 }
 
 pub fn moveDown(self: *Board) bool {
-    boardCopy(self.prev, self);
+    boardCopy(self.tmp, self);
     rotateLeft(self.cells);
     defer rotateRight(self.cells);
-    return slide(self);
+    if (slide(self)) {
+        boardCopy(self.prev, self.tmp);
+        return true;
+    }
+    return false;
 }
 
 pub fn undo(self: *Board) void {

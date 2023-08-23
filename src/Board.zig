@@ -10,7 +10,9 @@ const DefaultPrng = std.rand.DefaultPrng;
 const allocator = main.allocator;
 const writer = main.writer;
 const CELL_SIZE = 7;
+const cwd = fs.cwd();
 var rnd: DefaultPrng = undefined;
+var savefile: []u8 = undefined;
 
 pub const Board = @This();
 
@@ -41,6 +43,21 @@ pub fn addRandom(self: *Board) !void {
     }
 }
 
+fn initSave(size: usize) !void {
+    var buf = try allocator.alloc(u8, 4096);
+    var env = os.getenv("XDG_CACHE_HOME");
+    var path: []u8 = undefined;
+    if (env != null) {
+        path = try fmt.bufPrint(buf, "{s}/2048/", .{env.?});
+    } else {
+        env = os.getenv("HOME") orelse unreachable; // TODO: windows
+        path = try fmt.bufPrint(buf, "{s}/.cache/2048/", .{env.?});
+    }
+    try cwd.makePath(path);
+    const len = (try fmt.bufPrint(buf[path.len..], "{d}", .{size})).len;
+    savefile = try allocator.realloc(buf, path.len + len);
+}
+
 fn createBoard(size: usize) ![][]u8 {
     var board = try allocator.alloc([]u8, size);
     for (board) |*row| {
@@ -59,6 +76,7 @@ fn destroyBoard(board: [][]u8) void {
 
 pub fn init(size: usize) !Board {
     rnd = DefaultPrng.init(@intCast(std.time.microTimestamp()));
+    try initSave(size);
     var board = Board{
         .cells = try createBoard(size),
         .size = size,
@@ -83,6 +101,7 @@ pub fn deinit(self: *Board) void {
     destroyBoard(self.tmp.cells);
     allocator.destroy(self.prev);
     allocator.destroy(self.tmp);
+    allocator.free(savefile);
 }
 
 pub fn reset(self: *Board) void {
@@ -92,27 +111,13 @@ pub fn reset(self: *Board) void {
     self.score = 0;
 }
 
-fn getSavePath(buf: []u8) !usize {
-    var env = os.getenv("XDG_CACHE_HOME");
-    if (env != null) {
-        return (try fmt.bufPrint(buf, "{s}/2048/", .{env.?})).len;
-    } else {
-        env = os.getenv("HOME") orelse unreachable; // TODO: windows
-        return (try fmt.bufPrint(buf, "{s}/.cache/2048/", .{env.?})).len;
-    }
-}
-
 pub fn load(self: *Board) !bool {
-    var path: [4096]u8 = undefined;
-    var len = try getSavePath(path[0..]);
-    len += (try fmt.bufPrint(path[len..], "{d}", .{self.size})).len;
-    const cwd = fs.cwd();
-    const f = cwd.openFile(path[0..len], .{.mode = .read_only}) catch |err| switch (err) {
+    const f = cwd.openFile(savefile, .{.mode = .read_only}) catch |err| switch (err) {
         error.FileNotFound => return false,
         else => |e| return e,
     };
     defer f.close();
-    errdefer cwd.deleteFile(path[0..len]) catch {};
+    errdefer cwd.deleteFile(savefile) catch {};
 
     var buf_reader = io.bufferedReader(f.reader());
     const reader = buf_reader.reader();
@@ -127,8 +132,8 @@ pub fn load(self: *Board) !bool {
         }
     }
 
-    if (try gameOver(self)) {
-        cwd.deleteFile(path[0..len]) catch {};
+    if (gameOver(self)) {
+        try cwd.deleteFile(savefile);
         self.reset();
         return false;
     }
@@ -137,14 +142,9 @@ pub fn load(self: *Board) !bool {
 }
 
 pub fn save(self: *Board) !void {
-    var path: [4096]u8 = undefined;
-    var len = try getSavePath(path[0..]);
-    const cwd = fs.cwd();
-    try cwd.makePath(path[0..len]);
-    len += (try fmt.bufPrint(path[len..], "{d}", .{self.size})).len;
-    const f = try cwd.createFile(path[0..len], .{});
+    const f = try cwd.createFile(savefile, .{});
     defer f.close();
-    errdefer cwd.deleteFile(path[0..len]) catch {};
+    errdefer cwd.deleteFile(savefile) catch {};
 
     var buf_writer = io.bufferedWriter(f.writer());
     const fwriter = buf_writer.writer();
@@ -310,7 +310,7 @@ fn findPairOneWay(board: [][]u8) bool {
     return false;
 }
 
-pub fn gameOver(self: *Board) !bool {
+pub fn gameOver(self: *Board) bool {
     if (hasValue(self.cells, 0))
         return false;
     if (findPairOneWay(self.cells))
@@ -412,7 +412,7 @@ pub fn draw(self: *Board) !void {
         if (!self.win and hasValue(self.cells, 11)) {
             self.win = true;
             try print(self, "VICTORY!");
-        } else if (try gameOver(self)) {
+        } else if (gameOver(self)) {
             try print(self, "GAME OVER");
         } else {
             try writer.writeAll("\n");

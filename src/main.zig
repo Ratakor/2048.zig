@@ -11,10 +11,8 @@ pub const allocator = fba.allocator();
 
 pub fn main() !void {
     const reader = std.io.getStdIn().reader();
-
     var board = try Board.init(try args.parse());
     defer board.deinit();
-
     try term.init();
     defer term.deinit() catch {};
 

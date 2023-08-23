@@ -14,14 +14,14 @@ pub const Color = enum(u8) {
     cyan,
     white,
     default,
-    brightBlack = 90,
-    brightRed,
-    brightGreen,
-    brightYellow,
-    brightBlue,
-    brightMagenta,
-    brightCyan,
-    brightWhite,
+    bright_black = 90,
+    bright_red,
+    bright_green,
+    bright_yellow,
+    bright_blue,
+    bright_magenta,
+    bright_cyan,
+    bright_white,
 };
 
 fn enterAlt() !void {
@@ -57,7 +57,7 @@ pub fn init() !void {
 
 pub fn deinit() !void {
     const handle = os.STDIN_FILENO;
-    try os.tcsetattr(handle, .FLUSH, orig); // .NOW
+    try os.tcsetattr(handle, .FLUSH, orig);
     try clear();
     try leaveAlt();
     try showCursor();

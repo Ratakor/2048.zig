@@ -3,15 +3,14 @@ const fmt = std.fmt;
 const fs = std.fs;
 const io = std.io;
 const os = std.os;
-const rand = std.rand;
-const time = std.time;
 const main = @import("main.zig");
 const term = @import("term.zig");
 
+const DefaultPrng = std.rand.DefaultPrng;
 const allocator = main.allocator;
 const writer = main.writer;
-const CELL_SIZE = 7; // DO NOT CHANGE
-var rnd: rand.DefaultPrng = undefined;
+const CELL_SIZE = 7;
+var rnd: DefaultPrng = undefined;
 
 pub const Board = @This();
 
@@ -59,7 +58,7 @@ fn destroyBoard(board: [][]u8) void {
 }
 
 pub fn init(size: usize) !Board {
-    rnd = rand.DefaultPrng.init(@intCast(time.microTimestamp()));
+    rnd = DefaultPrng.init(@intCast(std.time.microTimestamp()));
     var board = Board{
         .cells = try createBoard(size),
         .size = size,
@@ -127,6 +126,13 @@ pub fn load(self: *Board) !bool {
             self.cells[i][j] = try reader.readByte();
         }
     }
+
+    if (try gameOver(self)) {
+        cwd.deleteFile(path[0..len]) catch {};
+        self.reset();
+        return false;
+    }
+
     return true;
 }
 
@@ -304,16 +310,6 @@ fn findPairOneWay(board: [][]u8) bool {
     return false;
 }
 
-fn deleteSave(size: usize) !void {
-    var path: [4096]u8 = undefined;
-    var len = try getSavePath(path[0..]);
-    len += (try fmt.bufPrint(path[len..], "{d}", .{size})).len;
-    fs.deleteFileAbsolute(path[0..len]) catch |err| switch (err) {
-        error.FileNotFound => {},
-        else => |e| return e,
-    };
-}
-
 pub fn gameOver(self: *Board) !bool {
     if (hasValue(self.cells, 0))
         return false;
@@ -323,7 +319,6 @@ pub fn gameOver(self: *Board) !bool {
     defer rotateLeft(self.cells);
     if (findPairOneWay(self.cells))
         return false;
-    try deleteSave(self.size);
     return true;
 }
 
@@ -337,19 +332,19 @@ fn setColors(cell: u8) !void {
         16 => try term.setBg(term.Color.blue),
         32 => try term.setBg(term.Color.magenta),
         64 => try term.setBg(term.Color.cyan),
-        128 => try term.setBg(term.Color.brightRed),
-        256 => try term.setBg(term.Color.brightGreen),
-        512 => try term.setBg(term.Color.brightYellow),
-        1024 => try term.setBg(term.Color.brightBlue),
-        2048 => try term.setBg(term.Color.brightMagenta),
-        4096 => try term.setBg(term.Color.brightCyan),
+        128 => try term.setBg(term.Color.bright_red),
+        256 => try term.setBg(term.Color.bright_green),
+        512 => try term.setBg(term.Color.bright_yellow),
+        1024 => try term.setBg(term.Color.bright_blue),
+        2048 => try term.setBg(term.Color.bright_magenta),
+        4096 => try term.setBg(term.Color.bright_cyan),
         8192 => {
             try term.setFg(term.Color.white);
             try term.setBg(term.Color.black);
         },
         else => {
             try term.reset();
-            try term.setBg(term.Color.brightBlack);
+            try term.setBg(term.Color.bright_black);
         }
     }
 }

@@ -1,6 +1,5 @@
 const std = @import("std");
 const fmt = std.fmt;
-const fs = std.fs;
 const io = std.io;
 const os = std.os;
 const main = @import("main.zig");
@@ -10,7 +9,7 @@ const DefaultPrng = std.rand.DefaultPrng;
 const allocator = main.allocator;
 const writer = main.writer;
 const CELL_SIZE = 7;
-const cwd = fs.cwd();
+const cwd = std.fs.cwd();
 var rnd: DefaultPrng = undefined;
 var savefile: []u8 = undefined;
 
@@ -43,21 +42,6 @@ pub fn addRandom(self: *Board) !void {
     }
 }
 
-fn initSave(size: usize) !void {
-    var buf = try allocator.alloc(u8, 4096);
-    var env = os.getenv("XDG_CACHE_HOME");
-    var path: []u8 = undefined;
-    if (env != null) {
-        path = try fmt.bufPrint(buf, "{s}/2048/", .{env.?});
-    } else {
-        env = os.getenv("HOME") orelse unreachable; // TODO: windows
-        path = try fmt.bufPrint(buf, "{s}/.cache/2048/", .{env.?});
-    }
-    try cwd.makePath(path);
-    const len = (try fmt.bufPrint(buf[path.len..], "{d}", .{size})).len;
-    savefile = try allocator.realloc(buf, path.len + len);
-}
-
 fn createBoard(size: usize) ![][]u8 {
     var board = try allocator.alloc([]u8, size);
     for (board) |*row| {
@@ -76,7 +60,6 @@ fn destroyBoard(board: [][]u8) void {
 
 pub fn init(size: usize) !Board {
     rnd = DefaultPrng.init(@intCast(std.time.microTimestamp()));
-    try initSave(size);
     var board = Board{
         .cells = try createBoard(size),
         .size = size,
@@ -111,7 +94,20 @@ pub fn reset(self: *Board) void {
     self.score = 0;
 }
 
-pub fn load(self: *Board) !bool {
+fn load(self: *Board) !bool {
+    var buf: [4096]u8 = undefined;
+    var env = os.getenv("XDG_CACHE_HOME");
+    var path: []u8 = undefined;
+    if (env != null) {
+        path = try fmt.bufPrint(buf[0..], "{s}/2048/", .{env.?});
+    } else {
+        env = os.getenv("HOME") orelse unreachable; // TODO: windows
+        path = try fmt.bufPrint(buf[0..], "{s}/.cache/2048/", .{env.?});
+    }
+    try cwd.makePath(path);
+    const len = path.len + (try fmt.bufPrint(buf[path.len..], "{d}", .{self.size})).len;
+    savefile = try allocator.dupe(u8, buf[0..len]);
+
     const f = cwd.openFile(savefile, .{.mode = .read_only}) catch |err| switch (err) {
         error.FileNotFound => return false,
         else => |e| return e,
@@ -121,8 +117,8 @@ pub fn load(self: *Board) !bool {
 
     var buf_reader = io.bufferedReader(f.reader());
     const reader = buf_reader.reader();
-    var buf: [32]u8 = undefined;
-    const score = try reader.readUntilDelimiter(buf[0..], '\n');
+    var score_buf: [32]u8 = undefined;
+    const score = try reader.readUntilDelimiter(score_buf[0..], '\n');
     self.score = try fmt.parseInt(u32, score, 10);
     var i: usize = 0;
     while (i < self.size) : (i += 1) {
@@ -230,6 +226,10 @@ fn slide(self: *Board) bool {
         }
     }
 
+    if (success) {
+        boardCopy(self.prev, self.tmp);
+    }
+
     return success;
 }
 
@@ -242,22 +242,14 @@ fn boardCopy(dst: *Board, src: *Board) void {
 
 pub fn moveLeft(self: *Board) bool {
     boardCopy(self.tmp, self);
-    if (slide(self)) {
-        boardCopy(self.prev, self.tmp);
-        return true;
-    }
-    return false;
+    return slide(self);
 }
 
 pub fn moveUp(self: *Board) bool {
     boardCopy(self.tmp, self);
     rotateRight(self.cells);
     defer rotateLeft(self.cells);
-    if (slide(self)) {
-        boardCopy(self.prev, self.tmp);
-        return true;
-    }
-    return false;
+    return slide(self);
 }
 
 pub fn moveRight(self: *Board) bool {
@@ -266,22 +258,14 @@ pub fn moveRight(self: *Board) bool {
     rotateRight(self.cells);
     defer rotateLeft(self.cells);
     defer rotateLeft(self.cells);
-    if (slide(self)) {
-        boardCopy(self.prev, self.tmp);
-        return true;
-    }
-    return false;
+    return slide(self);
 }
 
 pub fn moveDown(self: *Board) bool {
     boardCopy(self.tmp, self);
     rotateLeft(self.cells);
     defer rotateRight(self.cells);
-    if (slide(self)) {
-        boardCopy(self.prev, self.tmp);
-        return true;
-    }
-    return false;
+    return slide(self);
 }
 
 pub fn undo(self: *Board) void {
@@ -457,5 +441,5 @@ test "gameOver" {
     board.cells[0][1] = 3;
     board.cells[1][0] = 3;
     board.cells[1][1] = 2;
-    try std.testing.expect(gameOver(&board));
+    try std.testing.expect(board.gameOver());
 }

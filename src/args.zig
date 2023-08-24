@@ -2,7 +2,7 @@ const std = @import("std");
 const eql = std.mem.eql;
 const allocator = @import("main.zig").allocator;
 
-const version = "0.1.1";
+const version = "0.1.2";
 const usage =
     \\Usage: {s} [options]
     \\

@@ -393,16 +393,16 @@ pub fn draw(self: *Board) !void {
         }
         try term.reset();
         try writer.writeAll("\n");
-        if (!self.win and hasValue(self.cells, 11)) {
-            self.win = true;
-            try print(self, "VICTORY!");
-        } else if (gameOver(self)) {
-            try print(self, "GAME OVER");
-        } else {
-            try writer.writeAll("\n");
-        }
-        try term.cursorUp();
     }
+    if (!self.win and hasValue(self.cells, 11)) {
+        self.win = true;
+        try print(self, "VICTORY!");
+    } else if (gameOver(self)) {
+        try print(self, "GAME OVER");
+    } else {
+        try writer.writeAll("\n");
+    }
+    try term.cursorUp();
     try main.buf_writer.flush();
 }
 

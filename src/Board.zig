@@ -96,19 +96,19 @@ pub fn reset(self: *Board) void {
 
 fn load(self: *Board) !bool {
     var buf: [4096]u8 = undefined;
-    var env = os.getenv("XDG_CACHE_HOME");
     var path: []u8 = undefined;
-    if (env != null) {
-        path = try fmt.bufPrint(buf[0..], "{s}/2048/", .{env.?});
+    if (os.getenv("XDG_CACHE_HOME")) |xdg_cache| {
+        path = try fmt.bufPrint(buf[0..], "{s}/2048/", .{xdg_cache});
+    } else if (os.getenv("HOME")) |home| {
+        path = try fmt.bufPrint(buf[0..], "{s}/.cache/2048/", .{home});
     } else {
-        env = os.getenv("HOME") orelse unreachable; // TODO: windows
-        path = try fmt.bufPrint(buf[0..], "{s}/.cache/2048/", .{env.?});
+        unreachable; // TODO: windows
     }
     try cwd.makePath(path);
     const len = path.len + (try fmt.bufPrint(buf[path.len..], "{d}", .{self.size})).len;
     savefile = try allocator.dupe(u8, buf[0..len]);
 
-    const f = cwd.openFile(savefile, .{.mode = .read_only}) catch |err| switch (err) {
+    const f = cwd.openFile(savefile, .{ .mode = .read_only }) catch |err| switch (err) {
         error.FileNotFound => return false,
         else => |e| return e,
     };
@@ -166,7 +166,7 @@ fn findTarget(row: []u8, x: u8, stop: u8) u8 {
             }
             return t;
         } else if (t == stop) {
-                return t;
+            return t;
         }
     }
     unreachable;
@@ -329,7 +329,7 @@ fn setColors(cell: u8) !void {
         else => {
             try term.reset();
             try term.setBg(term.Color.bright_black);
-        }
+        },
     }
 }
 

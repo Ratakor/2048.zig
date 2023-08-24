@@ -32,7 +32,7 @@ pub fn main() !void {
                 }
                 try board.draw();
             },
-            'r' =>  {
+            'r' => {
                 try board.print("RESTART? (y/n)");
                 try buf_writer.flush();
                 if (try reader.readByte() == 'y') {
@@ -46,7 +46,7 @@ pub fn main() !void {
                 board.undo();
                 try board.draw();
             },
-            else => {}
+            else => {},
         }
         if (success) {
             try board.addRandom();

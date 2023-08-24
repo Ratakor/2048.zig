@@ -36,13 +36,13 @@ pub fn parse() !usize {
         if (eql(u8, arg, "-h") or eql(u8, arg, "--help")) {
             die(0, usage, .{progname});
         } else if (eql(u8, arg, "-v") or eql(u8, arg, "--version")) {
-            die(0, "{s} {s}\n", .{progname, version});
+            die(0, "{s} {s}\n", .{ progname, version });
         } else if (eql(u8, arg, "-s") or eql(u8, arg, "--size")) {
             const val = args.next() orelse {
                 die(1, "{s}: no size provided\n", .{progname});
             };
             size = std.fmt.parseUnsigned(usize, val, 10) catch |err| {
-                die(1, "{s}: {}\n", .{progname, err});
+                die(1, "{s}: {}\n", .{ progname, err });
             };
             if (size <= 1) {
                 die(1, "{s}: size is too small\n", .{progname});
@@ -51,7 +51,7 @@ pub fn parse() !usize {
                 die(1, "{s}: size is too big\n", .{progname});
             }
         } else {
-            try die(1, "{s}: unknown option {s}\n" ++ usage, .{progname, arg, progname});
+            try die(1, "{s}: unknown option {s}\n" ++ usage, .{ progname, arg, progname });
         }
     }
     return size;

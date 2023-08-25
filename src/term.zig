@@ -51,7 +51,7 @@ pub fn init() !void {
     try hideCursor();
     try enterAlt();
     try clear();
-    try reset();
+    try resetColor();
     try main.buf_writer.flush();
 }
 
@@ -61,7 +61,7 @@ pub fn deinit() !void {
     try clear();
     try leaveAlt();
     try showCursor();
-    try reset();
+    try resetColor();
     try main.buf_writer.flush();
 }
 
@@ -93,6 +93,6 @@ pub inline fn setBg(bg: Color) !void {
     try writer.print(csi ++ "{d}m", .{@intFromEnum(bg) + 10});
 }
 
-pub inline fn reset() !void {
+pub inline fn resetColor() !void {
     try writer.writeAll(csi ++ "m");
 }

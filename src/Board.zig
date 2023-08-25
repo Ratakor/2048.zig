@@ -253,7 +253,6 @@ fn boardCopy(dst: *Board, src: *Board) void {
     for (dst.cells, src.cells) |dst_row, src_row| {
         @memcpy(dst_row, src_row);
     }
-    dst.highscore = src.highscore;
     dst.score = src.score;
     dst.turns = src.turns;
 }
@@ -345,7 +344,7 @@ fn setColors(cell: u8) !void {
             try term.setBg(term.Color.black);
         },
         else => {
-            try term.reset();
+            try term.resetColor();
             try term.setBg(term.Color.bright_black);
         },
     }
@@ -425,7 +424,7 @@ pub fn draw(self: *Board) !void {
             try setColors(cell);
             try writer.writeByteNTimes(' ', CELL_SIZE);
         }
-        try term.reset();
+        try term.resetColor();
         try writer.writeAll("\n");
     }
     if (!self.win and hasValue(self.cells, 11)) {

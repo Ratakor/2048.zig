@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.strip = b.option(bool, "strip", "strip the binary") orelse switch (optimize) {
+    exe.strip = b.option(bool, "strip", "Strip the binary") orelse switch (optimize) {
         .Debug, .ReleaseSafe => false,
         .ReleaseFast, .ReleaseSmall => true,
     };
@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
 
-    const release = b.step("release", "make an upstream binary release");
+    const release = b.step("release", "Make an upstream binary release");
     const release_targets = &[_][]const u8{
         "aarch64-linux", "x86_64-linux", "x86-linux", "riscv64-linux",
     };
@@ -54,4 +54,11 @@ pub fn build(b: *std.Build) void {
 
         release.dependOn(&install.step);
     }
+
+    const fmt_step = b.step("fmt", "Format all source files");
+    fmt_step.dependOn(&b.addFmt(.{ .paths = &.{ "build.zig", "src" } }).step);
+
+    const clean_step = b.step("clean", "Delete all artifacts created by zig build");
+    clean_step.dependOn(&b.addRemoveDirTree("zig-cache").step);
+    clean_step.dependOn(&b.addRemoveDirTree("zig-out").step);
 }

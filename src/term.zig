@@ -44,7 +44,7 @@ pub fn init() !void {
     var raw = orig;
     raw.lflag &= ~@as(
         os.system.tcflag_t,
-        os.system.ECHO | os.system.ICANON | os.system.ISIG
+        os.system.ECHO | os.system.ICANON,
     );
     try os.tcsetattr(handle, .FLUSH, raw);
 

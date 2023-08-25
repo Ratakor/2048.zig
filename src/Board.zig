@@ -11,16 +11,18 @@ const writer = main.writer;
 const CELL_SIZE = 7;
 const cwd = std.fs.cwd();
 var rnd: DefaultPrng = undefined;
-var savefile: []u8 = undefined;
 
 pub const Board = @This();
 
 cells: [][]u8,
 size: usize,
-score: u32,
-win: bool,
+highscore: u64,
+score: u64,
+turns: usize,
 prev: *Board,
 tmp: *Board,
+savefile: []u8,
+win: bool,
 
 pub fn addRandom(self: *Board) !void {
     var len: usize = 0;
@@ -58,23 +60,24 @@ fn destroyBoard(board: [][]u8) void {
     allocator.free(board);
 }
 
-pub fn init(size: usize) !Board {
+pub fn init(size: usize) !*Board {
     rnd = DefaultPrng.init(@intCast(std.time.microTimestamp()));
-    var board = Board{
-        .cells = try createBoard(size),
-        .size = size,
-        .score = 0,
-        .win = false,
-        .prev = try allocator.create(Board),
-        .tmp = try allocator.create(Board),
-    };
+    var board = try allocator.create(Board);
+    board.cells = try createBoard(size);
+    board.size = size;
+    board.highscore = 0;
+    board.score = 0;
+    board.turns = 0;
+    board.win = false;
+    board.prev = try allocator.create(Board);
+    board.tmp = try allocator.create(Board);
     board.prev.cells = try createBoard(size);
     board.tmp.cells = try createBoard(size);
     if (!try board.load()) {
         try board.addRandom();
         try board.addRandom();
     }
-    boardCopy(board.prev, &board);
+    boardCopy(board.prev, board);
     return board;
 }
 
@@ -84,7 +87,7 @@ pub fn deinit(self: *Board) void {
     destroyBoard(self.tmp.cells);
     allocator.destroy(self.prev);
     allocator.destroy(self.tmp);
-    allocator.free(savefile);
+    allocator.free(self.savefile);
 }
 
 pub fn reset(self: *Board) void {
@@ -92,34 +95,40 @@ pub fn reset(self: *Board) void {
         @memset(row, 0);
     }
     self.score = 0;
+    self.turns = 0;
+    self.win = false;
 }
 
 fn load(self: *Board) !bool {
     var buf: [4096]u8 = undefined;
     var path: []u8 = undefined;
-    if (os.getenv("XDG_CACHE_HOME")) |xdg_cache| {
-        path = try fmt.bufPrint(buf[0..], "{s}/2048/", .{xdg_cache});
+    if (os.getenv("XDG_DATA_HOME")) |xdg_data| {
+        path = try fmt.bufPrint(buf[0..], "{s}/2048/", .{xdg_data});
     } else if (os.getenv("HOME")) |home| {
-        path = try fmt.bufPrint(buf[0..], "{s}/.cache/2048/", .{home});
+        path = try fmt.bufPrint(buf[0..], "{s}/.local/share/2048/", .{home});
     } else {
         unreachable; // TODO: windows
     }
     try cwd.makePath(path);
     const len = path.len + (try fmt.bufPrint(buf[path.len..], "{d}", .{self.size})).len;
-    savefile = try allocator.dupe(u8, buf[0..len]);
+    self.savefile = try allocator.dupe(u8, buf[0..len]);
 
-    const f = cwd.openFile(savefile, .{ .mode = .read_only }) catch |err| switch (err) {
+    const f = cwd.openFile(self.savefile, .{ .mode = .read_only }) catch |err| switch (err) {
         error.FileNotFound => return false,
         else => |e| return e,
     };
     defer f.close();
-    errdefer cwd.deleteFile(savefile) catch {};
+    errdefer cwd.deleteFile(self.savefile) catch {};
 
     var buf_reader = io.bufferedReader(f.reader());
     const reader = buf_reader.reader();
-    var score_buf: [32]u8 = undefined;
-    const score = try reader.readUntilDelimiter(score_buf[0..], '\n');
-    self.score = try fmt.parseInt(u32, score, 10);
+    var nbuf: [32]u8 = undefined;
+    const highscore = try reader.readUntilDelimiter(nbuf[0..], '\n');
+    self.highscore = try fmt.parseInt(u64, highscore, 10);
+    const score = try reader.readUntilDelimiter(nbuf[0..], '\n');
+    self.score = try fmt.parseInt(u64, score, 10);
+    const turns = try reader.readUntilDelimiter(nbuf[0..], '\n');
+    self.turns = try fmt.parseInt(usize, turns, 10);
     var i: usize = 0;
     while (i < self.size) : (i += 1) {
         var j: usize = 0;
@@ -128,8 +137,7 @@ fn load(self: *Board) !bool {
         }
     }
 
-    if (gameOver(self)) {
-        try cwd.deleteFile(savefile);
+    if (self.turns == 0 or gameOver(self)) {
         self.reset();
         return false;
     }
@@ -138,13 +146,17 @@ fn load(self: *Board) !bool {
 }
 
 pub fn save(self: *Board) !void {
-    const f = try cwd.createFile(savefile, .{});
+    const f = try cwd.createFile(self.savefile, .{});
     defer f.close();
-    errdefer cwd.deleteFile(savefile) catch {};
+    errdefer cwd.deleteFile(self.savefile) catch {};
 
     var buf_writer = io.bufferedWriter(f.writer());
     const fwriter = buf_writer.writer();
-    try fwriter.print("{d}\n", .{self.score});
+    try fwriter.print("{d}\n{d}\n{d}\n", .{
+        self.highscore,
+        self.score,
+        self.turns,
+    });
     for (self.cells) |row| {
         for (row) |cell| {
             try fwriter.writeByte(cell);
@@ -226,8 +238,12 @@ fn slide(self: *Board) bool {
         }
     }
 
+    if (self.score > self.highscore) {
+        self.highscore = self.score;
+    }
     if (success) {
         boardCopy(self.prev, self.tmp);
+        self.turns += 1;
     }
 
     return success;
@@ -237,7 +253,9 @@ fn boardCopy(dst: *Board, src: *Board) void {
     for (dst.cells, src.cells) |dst_row, src_row| {
         @memcpy(dst_row, src_row);
     }
+    dst.highscore = src.highscore;
     dst.score = src.score;
+    dst.turns = src.turns;
 }
 
 pub fn moveLeft(self: *Board) bool {
@@ -333,7 +351,7 @@ fn setColors(cell: u8) !void {
     }
 }
 
-fn countDigits(number: u32) u8 {
+fn countDigits(number: u64) u8 {
     var count: u8 = 1;
     var n = number / 10;
     while (n != 0) {
@@ -345,10 +363,25 @@ fn countDigits(number: u32) u8 {
 
 fn printHeader(self: *Board) !void {
     const board_size = CELL_SIZE * self.size;
-    const n = board_size -| ("2048.zig ".len + countDigits(self.score) + " pts".len);
-    try writer.writeAll("2048.zig ");
-    try writer.writeByteNTimes(' ', n);
-    try writer.print("{d} pts\n\n", .{self.score});
+    const title = "2048.zig" ++ " ";
+    const score_digits = countDigits(self.score);
+    const turns_digits = countDigits(self.turns);
+    const highscore_digits = countDigits(self.highscore);
+
+    const stext1 = title.len + highscore_digits + "Highscore: ".len;
+    const n1 = board_size -| stext1;
+    try writer.writeAll(title);
+    try writer.writeByteNTimes(' ', n1);
+    try writer.print("Highscore: {d}\n", .{self.highscore});
+
+    const padding = highscore_digits - score_digits;
+    const stext2 = "Turns:  ".len + turns_digits + "Score: ".len + padding + score_digits;
+    const n2 = board_size -| stext2;
+    try writer.print("Turns: {d} ", .{self.turns});
+    try writer.writeByteNTimes(' ', n2);
+    try writer.writeAll("Score: ");
+    try writer.writeByteNTimes(' ', padding);
+    try writer.print("{d}\n", .{self.score});
 }
 
 pub fn print(self: *Board, str: []const u8) !void {
@@ -376,14 +409,15 @@ pub fn draw(self: *Board) !void {
                 const real = @as(u32, 1) << @intCast(cell);
                 const digits = countDigits(real);
                 // TODO kinda unsafe negative
-                const t = CELL_SIZE - digits;
+                var n = CELL_SIZE - digits;
+                n = n - n / 2;
                 if (digits % 2 == 0) {
-                    try writer.writeByteNTimes(' ', t - t / 2 - 1);
+                    try writer.writeByteNTimes(' ', n - 1);
                 } else {
-                    try writer.writeByteNTimes(' ', t - t / 2);
+                    try writer.writeByteNTimes(' ', n);
                 }
                 try writer.print("{d}", .{real});
-                try writer.writeByteNTimes(' ', t - t / 2);
+                try writer.writeByteNTimes(' ', n);
             }
         }
         try writer.writeAll("\n");
@@ -441,5 +475,11 @@ test "gameOver" {
     board.cells[0][1] = 3;
     board.cells[1][0] = 3;
     board.cells[1][1] = 2;
-    try std.testing.expect(board.gameOver());
+
+    const expect = std.testing.expect;
+    try expect(board.gameOver());
+    board.cells[1][0] = 0;
+    try expect(!board.gameOver());
+    board.cells[1][0] = 2;
+    try expect(!board.gameOver());
 }

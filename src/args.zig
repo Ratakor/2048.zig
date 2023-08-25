@@ -7,16 +7,16 @@ const usage =
     \\Usage: {s} [options]
     \\
     \\Options:
-    \\-s|--size [n]    | Set the board size to n
-    \\-h|--help        │ Print this help message
-    \\-v|--version     | Print version information
+    \\-s, --size [n]    | Set the board size to n
+    \\-h, --help        │ Print this help message
+    \\-v, --version     | Print version information
     \\
     \\Commands:
-    \\  ↑    w    k    | Classic movements
-    \\ ←↓→  asd  hjl   |
-    \\ q               | Quit the game
-    \\ r               | Restart the game
-    \\ u               | Undo one action
+    \\  ↑    w    k     | Classic movements
+    \\ ←↓→  asd  hjl    |
+    \\ q                | Quit the game
+    \\ r                | Restart the game
+    \\ u                | Undo one action
     \\
 ;
 

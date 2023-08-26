@@ -4,10 +4,10 @@ const args = @import("args.zig");
 const Board = @import("Board.zig");
 const term = @import("term.zig");
 
-pub var buf_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
-pub const writer = buf_writer.writer();
-var buffer: [std.mem.page_size]u8 = undefined;
-var fba = std.heap.FixedBufferAllocator.init(&buffer);
+pub var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
+pub const writer = buffered_writer.writer();
+var alloc_buffer: [std.mem.page_size]u8 = undefined;
+var fba = std.heap.FixedBufferAllocator.init(&alloc_buffer);
 pub const allocator = fba.allocator();
 var board: *Board = undefined;
 
@@ -45,7 +45,7 @@ pub fn main() !void {
             'd', 'l', 67 => success = board.moveRight(),
             'q' => {
                 try board.print("QUIT? (y/n)");
-                try buf_writer.flush();
+                try buffered_writer.flush();
                 if (try reader.readByte() == 'y') {
                     break;
                 }
@@ -53,7 +53,7 @@ pub fn main() !void {
             },
             'r' => {
                 try board.print("RESTART? (y/n)");
-                try buf_writer.flush();
+                try buffered_writer.flush();
                 if (try reader.readByte() == 'y') {
                     board.reset();
                     try board.addRandom();

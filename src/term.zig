@@ -52,7 +52,7 @@ pub fn init() !void {
     try enterAlt();
     try clear();
     try resetColor();
-    try main.buf_writer.flush();
+    try main.buffered_writer.flush();
 }
 
 pub fn deinit() !void {
@@ -62,7 +62,7 @@ pub fn deinit() !void {
     try leaveAlt();
     try showCursor();
     try resetColor();
-    try main.buf_writer.flush();
+    try main.buffered_writer.flush();
 }
 
 pub inline fn clear() !void {

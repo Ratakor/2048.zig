@@ -68,7 +68,6 @@ pub fn init(size: usize) !*Board {
     board.highscore = 0;
     board.score = 0;
     board.turns = 0;
-    board.win = false;
     board.prev = try allocator.create(Board);
     board.tmp = try allocator.create(Board);
     board.prev.cells = try createBoard(size);
@@ -77,6 +76,7 @@ pub fn init(size: usize) !*Board {
         try board.addRandom();
         try board.addRandom();
     }
+    board.win = gameWon(board.cells);
     boardCopy(board.prev, board);
     return board;
 }
@@ -97,6 +97,14 @@ pub fn reset(self: *Board) void {
     self.score = 0;
     self.turns = 0;
     self.win = false;
+}
+
+fn readNextVal(comptime T: type, reader: anytype, fixed_buffer_stream: anytype) !T {
+    var fbs = fixed_buffer_stream;
+    try reader.streamUntilDelimiter(fbs.writer(), '\n', fbs.buffer.len);
+    const output = fbs.getWritten();
+    fbs.reset();
+    return try fmt.parseInt(T, output, 10);
 }
 
 fn load(self: *Board) !bool {
@@ -120,20 +128,20 @@ fn load(self: *Board) !bool {
     defer f.close();
     errdefer cwd.deleteFile(self.savefile) catch {};
 
-    var buf_reader = io.bufferedReader(f.reader());
-    const reader = buf_reader.reader();
+    var br = io.bufferedReader(f.reader());
+    const br_reader = br.reader();
+
     var nbuf: [32]u8 = undefined;
-    const highscore = try reader.readUntilDelimiter(nbuf[0..], '\n');
-    self.highscore = try fmt.parseInt(u64, highscore, 10);
-    const score = try reader.readUntilDelimiter(nbuf[0..], '\n');
-    self.score = try fmt.parseInt(u64, score, 10);
-    const turns = try reader.readUntilDelimiter(nbuf[0..], '\n');
-    self.turns = try fmt.parseInt(usize, turns, 10);
+    var fbs = io.fixedBufferStream(&nbuf);
+    self.highscore = try readNextVal(u64, br_reader, fbs);
+    self.score = try readNextVal(u64, br_reader, fbs);
+    self.turns = try readNextVal(usize, br_reader, fbs);
+
     var i: usize = 0;
     while (i < self.size) : (i += 1) {
         var j: usize = 0;
         while (j < self.size) : (j += 1) {
-            self.cells[i][j] = try reader.readByte();
+            self.cells[i][j] = try br_reader.readByte();
         }
     }
 
@@ -150,19 +158,19 @@ pub fn save(self: *Board) !void {
     defer f.close();
     errdefer cwd.deleteFile(self.savefile) catch {};
 
-    var buf_writer = io.bufferedWriter(f.writer());
-    const fwriter = buf_writer.writer();
-    try fwriter.print("{d}\n{d}\n{d}\n", .{
+    var bw = io.bufferedWriter(f.writer());
+    const bw_writer = bw.writer();
+    try bw_writer.print("{d}\n{d}\n{d}\n", .{
         self.highscore,
         self.score,
         self.turns,
     });
     for (self.cells) |row| {
         for (row) |cell| {
-            try fwriter.writeByte(cell);
+            try bw_writer.writeByte(cell);
         }
     }
-    try buf_writer.flush();
+    try bw.flush();
 }
 
 fn findTarget(row: []u8, x: u8, stop: u8) u8 {
@@ -228,7 +236,7 @@ fn slide(self: *Board) bool {
                         row[t] = row[x];
                     } else if (row[t] == row[x]) {
                         row[t] += 1;
-                        self.score += @as(u32, 1) << @intCast(row[t]);
+                        self.score += @as(u64, 1) << @intCast(row[t]);
                         stop = t + 1;
                     }
                     row[x] = 0;
@@ -289,10 +297,10 @@ pub fn undo(self: *Board) void {
     boardCopy(self, self.prev);
 }
 
-fn hasValue(board: [][]u8, comptime val: u8) bool {
+fn gameWon(board: [][]u8) bool {
     for (board) |row| {
         for (row) |cell| {
-            if (cell == val)
+            if (cell >= 11)
                 return true;
         }
     }
@@ -312,20 +320,22 @@ fn findPairOneWay(board: [][]u8) bool {
 }
 
 pub fn gameOver(self: *Board) bool {
-    if (hasValue(self.cells, 0))
-        return false;
+    for (self.cells) |row| {
+        for (row) |cell| {
+            if (cell == 0)
+                return false; // has empty cells
+        }
+    }
     if (findPairOneWay(self.cells))
         return false;
     rotateRight(self.cells);
     defer rotateLeft(self.cells);
-    if (findPairOneWay(self.cells))
-        return false;
-    return true;
+    return !findPairOneWay(self.cells);
 }
 
 fn setColors(cell: u8) !void {
     try term.setFg(term.Color.black);
-    const real = @as(u32, 1) << @intCast(cell);
+    const real = @as(u64, 1) << @intCast(cell);
     switch (real) {
         2 => try term.setBg(term.Color.red),
         4 => try term.setBg(term.Color.green),
@@ -405,7 +415,7 @@ pub fn draw(self: *Board) !void {
             if (cell == 0) {
                 try writer.writeAll("   ·   ");
             } else {
-                const real = @as(u32, 1) << @intCast(cell);
+                const real = @as(u64, 1) << @intCast(cell);
                 const digits = countDigits(real);
                 // TODO kinda unsafe negative
                 var n = CELL_SIZE - digits;
@@ -427,16 +437,16 @@ pub fn draw(self: *Board) !void {
         try term.resetColor();
         try writer.writeAll("\n");
     }
-    if (!self.win and hasValue(self.cells, 11)) {
+    if (!self.win and gameWon(self.cells)) {
         self.win = true;
         try print(self, "VICTORY!");
-    } else if (gameOver(self)) {
+    } else if (self.gameOver()) {
         try print(self, "GAME OVER");
     } else {
         try writer.writeAll("\n");
     }
     try term.cursorUp();
-    try main.buf_writer.flush();
+    try main.buffered_writer.flush();
 }
 
 test "rotation" {

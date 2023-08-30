@@ -2,7 +2,7 @@
 ========
 2048 in zig with undo, automatic save and other cool stuff
 
-![preview](/preview.mp4)
+![preview](/preview.gif)
 
 Installation
 ------------

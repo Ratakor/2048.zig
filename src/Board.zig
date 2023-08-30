@@ -137,11 +137,9 @@ fn load(self: *Board) !bool {
     self.score = try readNextVal(u64, br_reader, fbs);
     self.turns = try readNextVal(usize, br_reader, fbs);
 
-    var i: usize = 0;
-    while (i < self.size) : (i += 1) {
-        var j: usize = 0;
-        while (j < self.size) : (j += 1) {
-            self.cells[i][j] = try br_reader.readByte();
+    for (0..self.size) |x| {
+        for (0..self.size) |y| {
+            self.cells[x][y] = try br_reader.readByte();
         }
     }
 
@@ -173,7 +171,7 @@ pub fn save(self: *Board) !void {
     try bw.flush();
 }
 
-fn findTarget(row: []u8, x: u8, stop: u8) u8 {
+fn findTarget(row: []u8, x: usize, stop: usize) usize {
     if (x == 0) {
         return 0;
     }
@@ -194,10 +192,8 @@ fn findTarget(row: []u8, x: u8, stop: u8) u8 {
 
 fn rotateRight(board: [][]u8) void {
     const n = board.len;
-    var i: u8 = 0;
-    while (i < n / 2) : (i += 1) {
-        var j = i;
-        while (j < n - i - 1) : (j += 1) {
+    for (0..n / 2) |i| {
+        for (i..n - i - 1) |j| {
             const tmp = board[i][j];
             board[i][j] = board[j][n - i - 1];
             board[j][n - i - 1] = board[n - i - 1][n - j - 1];
@@ -209,10 +205,8 @@ fn rotateRight(board: [][]u8) void {
 
 fn rotateLeft(board: [][]u8) void {
     const n = board.len;
-    var i: u8 = 0;
-    while (i < n / 2) : (i += 1) {
-        var j = i;
-        while (j < n - i - 1) : (j += 1) {
+    for (0..n / 2) |i| {
+        for (i..n - i - 1) |j| {
             const tmp = board[n - j - 1][i];
             board[n - j - 1][i] = board[n - i - 1][n - j - 1];
             board[n - i - 1][n - j - 1] = board[j][n - i - 1];
@@ -225,9 +219,8 @@ fn rotateLeft(board: [][]u8) void {
 fn slide(self: *Board) bool {
     var success = false;
     for (self.cells) |row| {
-        var x: u8 = 0;
-        var stop: u8 = 0;
-        while (x < row.len) : (x += 1) {
+        var stop: usize = 0;
+        for (0..row.len) |x| {
             if (row[x] != 0) {
                 const t = findTarget(row, x, stop);
 
@@ -308,10 +301,8 @@ fn gameWon(board: [][]u8) bool {
 }
 
 fn findPairOneWay(board: [][]u8) bool {
-    var x: u8 = 0;
-    while (x < board.len) : (x += 1) {
-        var y: u8 = 0;
-        while (y < board.len - 1) : (y += 1) {
+    for (0..board.len) |x| {
+        for (0..board.len - 1) |y| {
             if (board[x][y] == board[x][y + 1])
                 return true;
         }
@@ -407,7 +398,7 @@ pub fn draw(self: *Board) !void {
     for (self.cells) |row| {
         for (row) |cell| {
             try setColors(cell);
-            try writer.writeByteNTimes(' ', CELL_SIZE);
+            try writer.writeAll(" " ** CELL_SIZE);
         }
         try writer.writeAll("\n");
         for (row) |cell| {
@@ -432,7 +423,7 @@ pub fn draw(self: *Board) !void {
         try writer.writeAll("\n");
         for (row) |cell| {
             try setColors(cell);
-            try writer.writeByteNTimes(' ', CELL_SIZE);
+            try writer.writeAll(" " ** CELL_SIZE);
         }
         try term.resetColor();
         try writer.writeAll("\n");
@@ -474,6 +465,40 @@ test "rotation" {
     try expect(eql(u8, board[1], &([_]u8{ 0, 0, 0, 0 })));
     try expect(eql(u8, board[2], &([_]u8{ 1, 0, 0, 2 })));
     try expect(eql(u8, board[3], &([_]u8{ 2, 1, 0, 0 })));
+}
+
+test "move" {
+    var board = try init(4);
+    defer board.deinit();
+    board.reset();
+    board.cells[0][0] = 1;
+    board.cells[2][0] = 1;
+    board.cells[2][3] = 2;
+    board.cells[3][0] = 2;
+    board.cells[3][1] = 1;
+
+    const expect = std.testing.expect;
+    const eql = std.mem.eql;
+    try expect(board.moveRight());
+    try expect(eql(u8, board.cells[0], &([_]u8{ 0, 0, 0, 1 })));
+    try expect(eql(u8, board.cells[1], &([_]u8{ 0, 0, 0, 0 })));
+    try expect(eql(u8, board.cells[2], &([_]u8{ 0, 0, 1, 2 })));
+    try expect(eql(u8, board.cells[3], &([_]u8{ 0, 0, 2, 1 })));
+    try expect(board.moveDown());
+    try expect(eql(u8, board.cells[0], &([_]u8{ 0, 0, 0, 0 })));
+    try expect(eql(u8, board.cells[1], &([_]u8{ 0, 0, 0, 1 })));
+    try expect(eql(u8, board.cells[2], &([_]u8{ 0, 0, 1, 2 })));
+    try expect(eql(u8, board.cells[3], &([_]u8{ 0, 0, 2, 1 })));
+    try expect(board.moveLeft());
+    try expect(eql(u8, board.cells[0], &([_]u8{ 0, 0, 0, 0 })));
+    try expect(eql(u8, board.cells[1], &([_]u8{ 1, 0, 0, 0 })));
+    try expect(eql(u8, board.cells[2], &([_]u8{ 1, 2, 0, 0 })));
+    try expect(eql(u8, board.cells[3], &([_]u8{ 2, 1, 0, 0 })));
+    try expect(board.moveUp());
+    try expect(eql(u8, board.cells[0], &([_]u8{ 2, 2, 0, 0 })));
+    try expect(eql(u8, board.cells[1], &([_]u8{ 2, 1, 0, 0 })));
+    try expect(eql(u8, board.cells[2], &([_]u8{ 0, 0, 0, 0 })));
+    try expect(eql(u8, board.cells[3], &([_]u8{ 0, 0, 0, 0 })));
 }
 
 test "gameOver" {

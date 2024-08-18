@@ -1,5 +1,6 @@
 const std = @import("std");
-const os = std.os;
+const linux = std.os.linux;
+const process = std.process;
 const args = @import("args.zig");
 const Board = @import("Board.zig");
 const term = @import("term.zig");
@@ -16,24 +17,24 @@ fn sigHandler(sig: c_int) callconv(.C) void {
     board.save() catch {};
     board.deinit();
     term.deinit() catch {};
-    os.exit(0);
+    process.exit(0);
 }
 
 pub fn main() !void {
     const reader = std.io.getStdIn().reader();
-    board = try Board.init(try args.parse());
+    board = try Board.init(args.parse());
     defer board.deinit();
     try term.init();
     defer term.deinit() catch {};
 
-    const sa = os.Sigaction{
+    const sa = linux.Sigaction{
         .handler = .{ .handler = sigHandler },
-        .mask = os.empty_sigset,
-        .flags = os.SA.RESTART,
+        .mask = linux.filled_sigset,
+        .flags = linux.SA.RESTART,
     };
-    try os.sigaction(os.SIG.HUP, &sa, null);
-    try os.sigaction(os.SIG.INT, &sa, null);
-    try os.sigaction(os.SIG.TERM, &sa, null);
+    _ = linux.sigaction(linux.SIG.HUP, &sa, null);
+    _ = linux.sigaction(linux.SIG.INT, &sa, null);
+    _ = linux.sigaction(linux.SIG.TERM, &sa, null);
 
     try board.draw();
     while (true) {

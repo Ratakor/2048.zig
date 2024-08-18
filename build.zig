@@ -6,14 +6,14 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "2048",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .strip = b.option(bool, "strip", "Strip the binary") orelse switch (optimize) {
+            .Debug, .ReleaseSafe => false,
+            .ReleaseFast, .ReleaseSmall => true,
+        },
     });
-    exe.strip = b.option(bool, "strip", "Strip the binary") orelse switch (optimize) {
-        .Debug, .ReleaseSafe => false,
-        .ReleaseFast, .ReleaseSmall => true,
-    };
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     const board_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/Board.zig" },
+        .root_source_file = b.path("src/Board.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -40,13 +40,13 @@ pub fn build(b: *std.Build) void {
     for (release_targets) |target_string| {
         const rel_exe = b.addExecutable(.{
             .name = "2048",
-            .root_source_file = .{ .path = "src/main.zig" },
-            .target = std.zig.CrossTarget.parse(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = b.resolveTargetQuery(std.Target.Query.parse(.{
                 .arch_os_abi = target_string,
-            }) catch unreachable,
+            }) catch unreachable),
             .optimize = .ReleaseSafe,
+            .strip = true,
         });
-        rel_exe.strip = true;
 
         const install = b.addInstallArtifact(rel_exe, .{});
         install.dest_dir = .prefix;
@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) void {
     const fmt_step = b.step("fmt", "Format all source files");
     fmt_step.dependOn(&b.addFmt(.{ .paths = &.{ "build.zig", "src" } }).step);
 
-    const clean_step = b.step("clean", "Delete all artifacts created by zig build");
-    clean_step.dependOn(&b.addRemoveDirTree("zig-cache").step);
-    clean_step.dependOn(&b.addRemoveDirTree("zig-out").step);
+    const clean_step = b.step("clean", "Remove build artifacts");
+    clean_step.dependOn(&b.addRemoveDirTree(b.path(".zig-cache")).step);
+    clean_step.dependOn(&b.addRemoveDirTree(b.path("zig-out")).step);
 }

@@ -1,6 +1,5 @@
 const std = @import("std");
 const eql = std.mem.eql;
-const allocator = @import("main.zig").allocator;
 
 const version = "0.2.2";
 const usage =
@@ -23,12 +22,12 @@ const usage =
 fn die(status: u8, comptime fmt: []const u8, args: anytype) noreturn {
     const stderr = std.io.getStdErr().writer();
     stderr.print(fmt, args) catch {};
-    std.os.exit(status);
+    std.process.exit(status);
 }
 
-pub fn parse() !usize {
+pub fn parse() usize {
     var size: usize = 4;
-    var args = try std.process.argsWithAllocator(allocator);
+    var args = std.process.args();
     defer args.deinit();
 
     const progname = args.next().?;
@@ -51,8 +50,9 @@ pub fn parse() !usize {
                 die(1, "{s}: size is too big\n", .{progname});
             }
         } else {
-            try die(1, "{s}: unknown option {s}\n" ++ usage, .{ progname, arg, progname });
+            die(1, "{s}: unknown option {s}\n" ++ usage, .{ progname, arg, progname });
         }
     }
+
     return size;
 }

@@ -1,8 +1,10 @@
-const os = @import("std").os;
+const std = @import("std");
+const linux = std.os.linux;
+const posix = std.posix;
 const main = @import("main.zig");
 const writer = main.writer;
 const csi = "\x1b[";
-var orig: os.termios = undefined;
+var orig: linux.termios = undefined;
 
 pub const Color = enum(u8) {
     black = 30,
@@ -37,16 +39,14 @@ fn leaveAlt() !void {
 }
 
 pub fn init() !void {
-    const handle = os.STDIN_FILENO;
-    orig = try os.tcgetattr(handle);
+    const handle = linux.STDIN_FILENO;
+    _ = linux.tcgetattr(handle, &orig);
     errdefer deinit() catch {};
 
     var raw = orig;
-    raw.lflag &= ~@as(
-        os.system.tcflag_t,
-        os.system.ECHO | os.system.ICANON,
-    );
-    try os.tcsetattr(handle, .FLUSH, raw);
+    raw.lflag.ECHO = false;
+    raw.lflag.ICANON = false;
+    _ = linux.tcsetattr(handle, .FLUSH, &raw);
 
     try hideCursor();
     try enterAlt();
@@ -56,8 +56,8 @@ pub fn init() !void {
 }
 
 pub fn deinit() !void {
-    const handle = os.STDIN_FILENO;
-    try os.tcsetattr(handle, .FLUSH, orig);
+    const handle = linux.STDIN_FILENO;
+    _ = linux.tcsetattr(handle, .FLUSH, &orig);
     try clear();
     try leaveAlt();
     try showCursor();

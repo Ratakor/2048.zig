@@ -1,11 +1,11 @@
 const std = @import("std");
 const fmt = std.fmt;
 const io = std.io;
-const os = std.os;
+const posix = std.posix;
 const main = @import("main.zig");
 const term = @import("term.zig");
 
-const DefaultPrng = std.rand.DefaultPrng;
+const DefaultPrng = std.Random.DefaultPrng;
 const allocator = main.allocator;
 const writer = main.writer;
 const CELL_SIZE = 7;
@@ -45,7 +45,7 @@ pub fn addRandom(self: *Board) !void {
 }
 
 fn createBoard(size: usize) ![][]u8 {
-    var board = try allocator.alloc([]u8, size);
+    const board = try allocator.alloc([]u8, size);
     for (board) |*row| {
         row.* = try allocator.alloc(u8, size);
         @memset(row.*, 0);
@@ -110,9 +110,9 @@ fn readNextVal(comptime T: type, reader: anytype, fixed_buffer_stream: anytype) 
 fn load(self: *Board) !bool {
     var buf: [4096]u8 = undefined;
     var path: []u8 = undefined;
-    if (os.getenv("XDG_DATA_HOME")) |xdg_data| {
+    if (posix.getenv("XDG_DATA_HOME")) |xdg_data| {
         path = try fmt.bufPrint(buf[0..], "{s}/2048/", .{xdg_data});
-    } else if (os.getenv("HOME")) |home| {
+    } else if (posix.getenv("HOME")) |home| {
         path = try fmt.bufPrint(buf[0..], "{s}/.local/share/2048/", .{home});
     } else {
         unreachable; // TODO: windows
@@ -132,7 +132,7 @@ fn load(self: *Board) !bool {
     const br_reader = br.reader();
 
     var nbuf: [32]u8 = undefined;
-    var fbs = io.fixedBufferStream(&nbuf);
+    const fbs = io.fixedBufferStream(&nbuf);
     self.highscore = try readNextVal(u64, br_reader, fbs);
     self.score = try readNextVal(u64, br_reader, fbs);
     self.turns = try readNextVal(usize, br_reader, fbs);

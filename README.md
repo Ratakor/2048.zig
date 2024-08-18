@@ -8,7 +8,9 @@ Installation
 ------------
 Pick one of the release or build it yourself ;)
 To build have a look at `zig build --help` or just run
-`zig build -Doptimize=ReleaseSafe` the executable will be at ./zig-out/bin/2048.
+`zig build -Doptimize=ReleaseSafe` the executable will be at zig-out/bin/2048.
+
+Available on the [AUR](https://aur.archlinux.org/packages/2048.zig)!
 
 Usage
 -----

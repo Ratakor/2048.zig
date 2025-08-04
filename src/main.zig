@@ -7,7 +7,7 @@ const term = @import("term.zig");
 
 pub var buffered_writer = std.io.bufferedWriter(std.io.getStdOut().writer());
 pub const writer = buffered_writer.writer();
-var alloc_buffer: [std.mem.page_size]u8 = undefined;
+var alloc_buffer: [4096]u8 = undefined;
 var fba = std.heap.FixedBufferAllocator.init(&alloc_buffer);
 pub const allocator = fba.allocator();
 var board: *Board = undefined;
